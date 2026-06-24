@@ -1,15 +1,15 @@
 /* SOM Institutional Terminal - app.js */
 
+// SQE All-Indices build: only Base SIM plus the two benchmarks. 'Bench' is this
+// universe's own benchmark (Nifty 500); 'BenchN50' (Nifty 50) is injected from
+// the nifty50 dataset by injectDualBenchmark().
 const LAYERS = {
-  Base:        { label: 'Base SIM',      color: '#22d3ee', cls: 'ltag-base' },
-  ST:          { label: 'ST Filter',     color: '#8b5cf6', cls: 'ltag-st' },
-  EMA:         { label: 'EMA Filter',    color: '#10b981', cls: 'ltag-ema' },
-  COMBO:       { label: 'COMBO Filter',  color: '#f59e0b', cls: 'ltag-combo' },
-  ULTRA:       { label: 'ULTRA Layer',   color: '#ec4899', cls: 'ltag-ultra' },
-  COMBO_HEDGE: { label: 'COMBO+Hedge',   color: '#06b6d4', cls: 'ltag-ch' },
-  ULTRA_HEDGE: { label: 'ULTRA Defense', color: '#f43f5e', cls: 'ltag-uh' },
-  Bench:       { label: 'Benchmark',     color: '#94a3b8', cls: 'ltag-bench' }
+  Base:     { label: 'Base SIM',  color: '#22d3ee', cls: 'ltag-base' },
+  Bench:    { label: 'Nifty 500', color: '#94a3b8', cls: 'ltag-bench' },
+  BenchN50: { label: 'Nifty 50',  color: '#f59e0b', cls: 'ltag-bench' }
 };
+const BENCH_KEYS = ['Bench', 'BenchN50'];
+const isBenchKey = (l) => BENCH_KEYS.includes(l);
 
 let state = {
   universe: 'total759',
@@ -187,8 +187,34 @@ function renderChartControls(id) {
 /* ── DATA ACCESSOR ───────────────────────────── */
 function D() { return DASHBOARD_DATA[state.universe]; }
 
+/* Inject the Nifty 50 benchmark into the total759 universe as a 'BenchN50'
+   series so the layer-iterating charts show both benchmarks. Idempotent. */
+function injectDualBenchmark() {
+  const t = DASHBOARD_DATA.total759, n50 = DASHBOARD_DATA.nifty50;
+  if (!t || !n50 || t.__dualBench) return;
+  t.__dualBench = true;
+
+  // Equity curve — align Nifty 50 benchmark onto total759's month axis
+  if (t.equity_curves && n50.equity_curves) {
+    const byMonth = {};
+    (n50.equity_curves.months || []).forEach((mo, i) => { byMonth[mo] = n50.equity_curves.Bench?.[i]; });
+    t.equity_curves.BenchN50 = (t.equity_curves.months || []).map(mo => byMonth[mo] ?? null);
+  }
+  // Layer metrics
+  if (t.layer_metrics && n50.layer_metrics) {
+    t.layer_metrics.BenchN50 = n50.layer_metrics.Bench;
+  }
+  // Monthly detail — per-month Nifty 50 benchmark return (for heatmap + rolling calcs)
+  if (Array.isArray(t.monthly_detail) && Array.isArray(n50.monthly_detail)) {
+    const byMonth = {};
+    n50.monthly_detail.forEach(r => { byMonth[String(r.Month).slice(0, 7)] = r.Bench; });
+    t.monthly_detail.forEach(r => { r.BenchN50 = byMonth[String(r.Month).slice(0, 7)]; });
+  }
+}
+
 /* ── RENDER ROUTER ───────────────────────────── */
 function renderTab(tab) {
+  injectDualBenchmark();
   const d = D();
   if (!d) return;
   if (tab === 'overview')  renderOverview(d);
@@ -238,8 +264,8 @@ function renderOverview(d) {
   const ec = d.equity_curves;
   const datasets = Object.keys(LAYERS).map(l => ({
     label: LAYERS[l].label, data: ec[l] || [],
-    borderColor: LAYERS[l].color, borderWidth: l === 'Bench' ? 1 : 2,
-    borderDash: l === 'Bench' ? [5,4] : [],
+    borderColor: LAYERS[l].color, borderWidth: isBenchKey(l) ? 1 : 2,
+    borderDash: isBenchKey(l) ? [5,4] : [],
     pointRadius: 0, tension: 0.3, fill: false
   }));
   console.log(`[Equity Overview] Rendering ${datasets.length} layers.`);
@@ -261,8 +287,8 @@ function renderOverview(d) {
   }, { plugins:{legend:{display:false}}, scales:{y:{min:0,max:2,grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#64748b'}},
        x:{grid:{display:false},ticks:{color:'#64748b'}}} });
 
-  // Win rate bar
-  const layers7 = Object.keys(LAYERS).filter(l => l !== 'Bench');
+  // Win rate bar — Base SIM + both benchmarks
+  const layers7 = Object.keys(LAYERS);
   mkChart('winRateChart', 'bar', {
     labels: layers7.map(l => LAYERS[l].label),
     datasets: [{ label: 'Win Rate %', data: layers7.map(l => d.layer_metrics[l].Win_Rate),
@@ -376,7 +402,7 @@ function openHeatModal(monthStr) {
   const n500Val = benchOf('nifty500');
 
   const bodyEl = document.getElementById('modal-body');
-  const layers7 = Object.keys(LAYERS).filter(l => l !== 'Bench');
+  const layers7 = Object.keys(LAYERS).filter(l => !isBenchKey(l));
   // The per-layer delta below compares against the ACTIVE universe's benchmark
   const vsLabel = state.universe === 'nifty50' ? 'vs Nifty 50'
                 : state.universe === 'nifty500' ? 'vs Nifty 500'
@@ -447,8 +473,8 @@ function renderEquity(d) {
   const ec = d.equity_curves;
   const datasets = Object.keys(LAYERS).map(l => ({
     label: LAYERS[l].label, data: ec[l] || [],
-    borderColor: LAYERS[l].color, borderWidth: l === 'Bench' ? 1.5 : 2.5,
-    borderDash: l === 'Bench' ? [6,4] : [],
+    borderColor: LAYERS[l].color, borderWidth: isBenchKey(l) ? 1.5 : 2.5,
+    borderDash: isBenchKey(l) ? [6,4] : [],
     pointRadius: 0, tension: 0.3, fill: false
   }));
 
@@ -491,7 +517,7 @@ function renderRollingSharpe(d) {
   if (md.length <= windowSize) return;
   const labels = md.slice(windowSize).map(r => r.Month.slice(0, 7));
   
-  const datasets = Object.keys(LAYERS).filter(l => l !== 'Bench').map(l => {
+  const datasets = Object.keys(LAYERS).map(l => {
     const rolling = [];
     for (let i = windowSize; i < md.length; i++) {
       const slice = md.slice(i - windowSize, i);
@@ -589,7 +615,7 @@ function renderCrisis(d) {
   if (!container) return;
 
   const md = d.monthly_detail;
-  const layers = Object.keys(LAYERS).filter(l => l !== 'Bench');
+  const layers = Object.keys(LAYERS).filter(l => !isBenchKey(l));
 
   // Only show events that have data in the monthly detail
   const activeEvents = events.filter(e => md.some(r => r.Month.startsWith(e.date)));
@@ -648,7 +674,7 @@ function renderCrisis(d) {
 function updateWhatIf(shock) {
   const d = D();
   const md = d.monthly_detail;
-  const layers = Object.keys(LAYERS).filter(l => l !== 'Bench');
+  const layers = Object.keys(LAYERS).filter(l => !isBenchKey(l));
   
   document.getElementById('whatif-shock-val').textContent = (shock > 0 ? '+' : '') + shock + '%';
   
@@ -787,7 +813,7 @@ function renderLayers(d) {
     const m = d.layer_metrics[l];
     if (!m) return '';
     const ea = exAnte[l] != null ? exAnte[l].toFixed(2) : '—';
-    const isBench = l === 'Bench';
+    const isBench = isBenchKey(l);
     
     // For Benchmark, Alpha is not applicable (it is the benchmark itself)
     const alphaVal = isBench ? '—' : (m.Alpha >= 0 ? '+' : '') + m.Alpha.toFixed(2) + '%';
@@ -813,7 +839,7 @@ function renderLayers(d) {
     datasets: layers.map(l => {
       const m = d.layer_metrics[l];
       if (!m) return null;
-      const isBench = l === 'Bench';
+      const isBench = isBenchKey(l);
       return {
         label: LAYERS[l].label,
         data: [m.CAGR/30*100, m.Sharpe/2*100, m.Sortino/3*100, m.Win_Rate, Math.max(0,m.Alpha/20*100)],
@@ -836,7 +862,7 @@ function renderExecTable(d) {
   const el = document.getElementById('execTable');
   if (!el) return;
   const summary = d.exec_summary;
-  const stratLayers = ['Base','ST','EMA','COMBO','ULTRA','COMBO_HEDGE','ULTRA_HEDGE'];
+  const stratLayers = ['Base'];
   const metrics = Object.keys(summary).filter(m => m !== 'Sharpe' && m !== 'Sortino');
 
   // Strategy columns come from the active universe; the benchmark columns always
@@ -932,14 +958,10 @@ function renderChurning(d) {
       <td class="mono">${r.Month}</td>
       <td class="mono">${r.Stock_Count ?? '—'}</td>
       <td class="text-emerald mono">${r['Base Add'] ?? '—'}</td>
-      <td class="text-emerald mono">${r['ST Add'] ?? '—'}</td>
-      <td class="text-emerald mono">${r['EMA Add'] ?? '—'}</td>
       <td class="text-rose mono">${r['Base Rem'] ?? '—'}</td>
-      <td class="text-rose mono">${r['ST Rem'] ?? '—'}</td>
-      <td class="text-rose mono">${r['EMA Rem'] ?? '—'}</td>
     </tr>`).join('');
 
-  const churnKeys = ['Base','ST','EMA','COMBO','ULTRA'];
+  const churnKeys = ['Base'];
   mkChart('churnAddChart', 'line', {
     labels: sorted.map(r => r.Month),
     datasets: churnKeys.map((k,i) => ({
