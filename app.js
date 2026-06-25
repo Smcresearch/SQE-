@@ -675,30 +675,22 @@ function renderDrawdown(d) {
 }
 
 function renderRollingSharpe(d) {
-  const md = d.monthly_detail;
-  const windowSize = 12;
-  if (md.length <= windowSize) return;
-  const labels = md.slice(windowSize).map(r => r.Month.slice(0, 7));
-  
-  const datasets = Object.keys(LAYERS).map(l => {
-    const rolling = [];
-    for (let i = windowSize; i < md.length; i++) {
-      const slice = md.slice(i - windowSize, i);
-      const rets = slice.map(r => r[l] || 0);
-      const avg = rets.reduce((a,b) => a+b,0) / windowSize;
-      const std = Math.sqrt(rets.map(x => Math.pow(x - avg, 2)).reduce((a,b) => a+b,0) / windowSize);
-      const sr = std < 0.0001 ? 0 : (avg / std) * Math.sqrt(12);
-      rolling.push(+sr.toFixed(2));
-    }
-    return {
-      label: LAYERS[l].label, data: rolling,
-      borderColor: LAYERS[l].color, borderWidth: 2, pointRadius: 0, tension: 0.4, fill: false
-    };
-  });
+  // Ex-Ante Sharpe Ratio per month (from monthly_detail)
+  const md = (d.monthly_detail || []).filter(r =>
+    /^\d{4}-\d{2}/.test(String(r.Month)) &&
+    typeof r.Ex_Ante_Sharpe === 'number' && isFinite(r.Ex_Ante_Sharpe));
+  if (!md.length) return;
+  const labels = md.map(r => String(r.Month).slice(0, 7));
 
-  mkChart('rollingSharpeChart', 'line', { labels, datasets }, {
-    plugins: { legend: { display: false } }
-  });
+  mkChart('rollingSharpeChart', 'line', {
+    labels,
+    datasets: [{
+      label: 'Ex-Ante Sharpe',
+      data: md.map(r => +(+r.Ex_Ante_Sharpe).toFixed(2)),
+      borderColor: '#22d3ee', backgroundColor: 'rgba(34,211,238,0.10)',
+      borderWidth: 2, pointRadius: 0, tension: 0.3, fill: true
+    }]
+  }, { plugins: { legend: { display: false } } });
 }
 
 function renderCorrelation(d) {
