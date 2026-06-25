@@ -1160,28 +1160,72 @@ function renderPortfolio(d) {
       <span class="kpi-value" style="color:${k.color}">${sign(k.val)}${k.val.toFixed(2)}%</span>
     </div>`).join('');
 
-  // ── Holdings table ─────────────────────────
+  // ── Holdings table + investment calculator ─────────────
   const cleanPort = port.filter(s => s.clean_symbol && s.clean_symbol !== 'Stock');
 
-  document.getElementById('holdingsBody').innerHTML = cleanPort.map((s,i) => {
-    const ltp = s.ltp || 0;
-    const chg = s.change_pct || 0;
+  window.__portHolds = cleanPort.map(s => ({
+    s: s.clean_symbol,
+    sec: s.sector,
+    w: s.weight != null ? +(s.weight * 100).toFixed(2) : null,
+    p: (s.ltp != null && s.ltp > 0) ? +(+s.ltp).toFixed(2) : null,
+    chg: s.change_pct
+  }));
+
+  document.getElementById('holdingsBody').innerHTML = window.__portHolds.map((h,i) => {
+    const chg = h.chg || 0;
     const chgCol = chg >= 0 ? 'text-emerald' : 'text-rose';
-    const chgSign = chg >= 0 ? '+' : '';
-    const actionCol = (s.action||'').includes('BUY') ? 'text-emerald' : (s.action||'').includes('SELL') ? 'text-rose' : 'text-muted';
     return `<tr>
       <td class="text-muted mono" style="font-size:.7rem">${i+1}</td>
-      <td class="mono" style="font-weight:700">${s.clean_symbol}</td>
-      <td class="text-muted" style="font-size:.72rem">${s.sector}</td>
-      <td class="mono">${ltp > 0 ? '₹'+ltp.toFixed(2) : '—'}</td>
-      <td class="mono ${chgCol}" style="font-weight:700">${ltp > 0 ? chgSign+chg.toFixed(2)+'%' : '—'}</td>
-      <td class="mono ${actionCol}" style="font-weight:700">${s.action || 'HOLD'}</td>
-      <td class="mono text-muted" style="font-size:.7rem">${s.date || '—'}</td>
+      <td class="mono" style="font-weight:700">${h.s}</td>
+      <td class="text-muted" style="font-size:.7rem">${h.sec}</td>
+      <td class="mono">${h.w != null ? h.w + '%' : '—'}</td>
+      <td class="mono">${h.p != null ? '₹'+h.p.toLocaleString('en-IN') : '—'}</td>
+      <td class="mono ${chgCol}" style="font-weight:700">${h.p != null ? (chg>=0?'+':'')+(+chg).toFixed(2)+'%' : '—'}</td>
+      <td class="mono text-cyan" id="piq${i}" style="font-weight:700">—</td>
+      <td class="mono text-emerald" id="pia${i}">—</td>
     </tr>`;
   }).join('');
 
+  recalcPortInvest();
   renderSectorPie('portSector', cleanPort);
 }
+
+/* Investment calculator for the Live Portfolio tab (same math as the heatmap
+   modal's recalcInvest, with its own 'p'-prefixed element ids). */
+function recalcPortInvest() {
+  const holds = window.__portHolds || [];
+  const amtEl = document.getElementById('pinv-amt');
+  if (!amtEl) return;
+  const total = Math.max(0, +amtEl.value || 0);
+  const fmt = (n) => '₹' + Math.round(n).toLocaleString('en-IN');
+  let invested = 0;
+  holds.forEach((h, i) => {
+    const qEl = document.getElementById('piq' + i);
+    const aEl = document.getElementById('pia' + i);
+    if (!qEl || !aEl) return;
+    if (h.p && h.p > 0 && h.w != null) {
+      const qty = Math.max(1, Math.floor((total * (h.w / 100)) / h.p));
+      const cost = qty * h.p;
+      invested += cost;
+      qEl.textContent = qty.toLocaleString('en-IN');
+      aEl.textContent = fmt(cost);
+    } else {
+      qEl.textContent = '—';
+      aEl.textContent = '—';
+    }
+  });
+  const cash = total - invested;
+  const tEl = document.getElementById('pinv-total');
+  const cEl = document.getElementById('pinv-cash');
+  const clEl = document.getElementById('pinv-cash-label');
+  if (tEl) tEl.textContent = fmt(invested);
+  if (clEl) clEl.textContent = cash < 0 ? 'Extra Needed (min 1 share each)' : 'Cash Left';
+  if (cEl) {
+    cEl.textContent = (cash < 0 ? '-' : '') + fmt(Math.abs(cash));
+    cEl.style.color = cash < 0 ? 'var(--rose)' : 'var(--slate)';
+  }
+}
+window.recalcPortInvest = recalcPortInvest;
 
 /* ══════════════════════════════════════════════
    TRADES
