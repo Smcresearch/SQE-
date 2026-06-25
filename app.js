@@ -4,7 +4,7 @@
 // universe's own benchmark (Nifty 500); 'BenchN50' (Nifty 50) is injected from
 // the nifty50 dataset by injectDualBenchmark().
 const LAYERS = {
-  Base:     { label: 'Base SIM',  color: '#22d3ee', cls: 'ltag-base' },
+  Base:     { label: 'SQE',       color: '#22d3ee', cls: 'ltag-base' },
   Bench:    { label: 'Nifty 500', color: '#94a3b8', cls: 'ltag-bench' },
   BenchN50: { label: 'Nifty 50',  color: '#f59e0b', cls: 'ltag-bench' }
 };
@@ -234,7 +234,7 @@ function renderTab(tab) {
 function renderOverview(d) {
   const base = d.layer_metrics.Base;
   const kpis = [
-    { label: 'CAGR (Base SIM)',  val: base.CAGR,          unit: '%', color: '#22d3ee', accent: '#22d3ee' },
+    { label: 'CAGR (SQE)',       val: base.CAGR,          unit: '%', color: '#22d3ee', accent: '#22d3ee' },
     { label: 'Ex-Ante Sharpe',   val: d.avg_ex_ante_sr,   unit: '',  color: '#f59e0b', accent: '#f59e0b' },
     { label: 'Max Drawdown',     val: base.Max_DD,         unit: '%', color: '#f43f5e', accent: '#f43f5e' },
     { label: 'Total Return',     val: base.Total_Return,   unit: '%', color: '#10b981', accent: '#10b981' },
@@ -412,7 +412,7 @@ function openHeatModal(monthStr) {
   // the current/live month has no snapshot yet, so fall back to current_portfolio.
   const smap = DASHBOARD_DATA.sector_map || {};
   let holds = (typeof MONTHLY_HOLDINGS !== 'undefined' && MONTHLY_HOLDINGS[monthStr]) || [];
-  let portoLabel = 'Base SIM Portfolio';
+  let portoLabel = 'SQE Portfolio';
   if (!holds.length) {
     const cp = (d.current_portfolio || []).filter(s => s.clean_symbol && s.clean_symbol !== 'Stock');
     const liveMonth = String((cp.find(s => s.date) || {}).date || DASHBOARD_DATA.last_update || '').slice(0, 7);
@@ -922,7 +922,7 @@ function renderWhatIf(d) {
         <div class="crisis-card" style="border-left:4px solid var(--rose)">
           <div class="crisis-name" style="font-size:0.7rem; color:var(--muted)">CORE MODEL IMPACT</div>
           <div id="whatif-impact" class="mono" style="font-size:1.5rem; font-weight:700; margin:0.5rem 0">0.00%</div>
-          <div style="font-size:0.75rem; color:var(--slate)">Projected move for Base SIM layer</div>
+          <div style="font-size:0.75rem; color:var(--slate)">Projected move for SQE layer</div>
         </div>
         <div class="crisis-card" style="border-left:4px solid var(--emerald)">
           <div class="crisis-name" style="font-size:0.7rem; color:var(--muted)">HEDGE PROTECTION ESTIMATE</div>
