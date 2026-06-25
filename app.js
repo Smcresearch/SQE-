@@ -421,34 +421,58 @@ function openHeatModal(monthStr) {
         s: s.clean_symbol,
         sec: s.sector,
         w: s.weight != null ? +(s.weight * 100).toFixed(2) : null,
-        st: s.status || '—',
-        a: s.action || '—'
+        p: s.ltp != null ? +(+s.ltp).toFixed(2) : null
       }));
       portoLabel = 'Live Portfolio';
     }
   }
+  // Attach sector + expose for the investment calculator (recalcInvest)
+  holds.forEach(h => { h.sec = h.sec || smap[h.s] || '—'; });
+  window.__invHolds = holds;
+
+  const fmtINR = (n) => '₹' + Math.round(n).toLocaleString('en-IN');
   const holdingsHtml = `
     <div style="margin-top:1.25rem">
-      <div class="modal-metric" style="margin-bottom:.5rem">${portoLabel} — ${holds.length} Holding${holds.length === 1 ? '' : 's'}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:.6rem">
+        <div class="modal-metric">${portoLabel} — ${holds.length} Holding${holds.length === 1 ? '' : 's'}</div>
+        ${holds.length ? `<div style="display:flex;align-items:center;gap:.5rem">
+          <span class="modal-metric">Invest</span>
+          <span class="mono" style="color:var(--slate)">₹</span>
+          <input id="inv-amt" type="number" min="0" step="10000" value="100000" oninput="recalcInvest()"
+            style="width:130px;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:.4rem;
+                   color:var(--cyan);font-family:var(--mono);font-weight:700;padding:.35rem .5rem;font-size:.8rem">
+        </div>` : ''}
+      </div>
       ${holds.length ? `
       <div style="border:1px solid var(--border);border-radius:.5rem;overflow:hidden">
         <table class="data-table mini-table">
           <colgroup>
-            <col style="width:7%"><col style="width:22%"><col style="width:29%"><col style="width:13%"><col style="width:14%"><col style="width:15%">
+            <col style="width:5%"><col style="width:19%"><col style="width:24%"><col style="width:11%"><col style="width:14%"><col style="width:10%"><col style="width:17%">
           </colgroup>
           <thead><tr>
-            <th>#</th><th>Stock</th><th>Sector</th><th>Weight</th><th>Status</th><th>Action</th>
+            <th>#</th><th>Stock</th><th>Sector</th><th>Weight</th><th>Price</th><th>Qty</th><th>Amount</th>
           </tr></thead>
           <tbody>
             ${holds.map((h, i) => `<tr>
               <td class="text-muted mono" style="font-size:.65rem">${i + 1}</td>
               <td class="mono" style="font-weight:700">${h.s}</td>
-              <td class="text-muted" style="font-size:.68rem">${h.sec || smap[h.s] || '—'}</td>
+              <td class="text-muted" style="font-size:.68rem">${h.sec}</td>
               <td class="mono">${h.w != null ? h.w + '%' : '—'}</td>
-              <td class="mono ${h.st === 'Added' ? 'text-emerald' : 'text-muted'}" style="font-size:.68rem">${h.st}</td>
-              <td class="mono ${(h.a || '').includes('BUY') ? 'text-emerald' : (h.a || '').includes('SELL') ? 'text-rose' : 'text-muted'}" style="font-size:.68rem">${h.a}</td>
+              <td class="mono">${h.p != null ? fmtINR(h.p) : '—'}</td>
+              <td class="mono text-cyan" id="iq${i}" style="font-weight:700">—</td>
+              <td class="mono text-emerald" id="ia${i}">—</td>
             </tr>`).join('')}
           </tbody>
+          <tfoot>
+            <tr style="border-top:1px solid var(--border)">
+              <td colspan="6" class="text-muted" style="font-size:.68rem;text-align:right">Total Invested</td>
+              <td class="mono text-emerald" id="inv-total" style="font-weight:700">—</td>
+            </tr>
+            <tr>
+              <td colspan="6" class="text-muted" style="font-size:.68rem;text-align:right">Cash Left</td>
+              <td class="mono" id="inv-cash" style="color:var(--slate)">—</td>
+            </tr>
+          </tfoot>
         </table>
       </div>` : `<div class="text-muted" style="font-size:.75rem">No holdings snapshot available for this month.</div>`}
     </div>`;
@@ -494,9 +518,41 @@ function openHeatModal(monthStr) {
     ${holdingsHtml}`;
 
   document.getElementById('hmModal').classList.add('open');
+  recalcInvest();   // populate Qty/Amount for the default ₹1,00,000
 }
 
 window.openHeatModal = openHeatModal;
+
+/* Investment calculator: split the entered amount across holdings by weight,
+   buy whole shares at each price, and show qty + cost per stock with totals. */
+function recalcInvest() {
+  const holds = window.__invHolds || [];
+  const amtEl = document.getElementById('inv-amt');
+  if (!amtEl) return;
+  const total = Math.max(0, +amtEl.value || 0);
+  const fmt = (n) => '₹' + Math.round(n).toLocaleString('en-IN');
+  let invested = 0;
+  holds.forEach((h, i) => {
+    const qEl = document.getElementById('iq' + i);
+    const aEl = document.getElementById('ia' + i);
+    if (!qEl || !aEl) return;
+    if (h.p && h.p > 0 && h.w != null) {
+      const qty = Math.floor((total * (h.w / 100)) / h.p);
+      const cost = qty * h.p;
+      invested += cost;
+      qEl.textContent = qty.toLocaleString('en-IN');
+      aEl.textContent = fmt(cost);
+    } else {
+      qEl.textContent = '—';
+      aEl.textContent = '—';
+    }
+  });
+  const tEl = document.getElementById('inv-total');
+  const cEl = document.getElementById('inv-cash');
+  if (tEl) tEl.textContent = fmt(invested);
+  if (cEl) cEl.textContent = fmt(total - invested);
+}
+window.recalcInvest = recalcInvest;
 
 /* ══════════════════════════════════════════════
    EQUITY CURVES
