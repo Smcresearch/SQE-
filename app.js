@@ -446,6 +446,25 @@ function openHeatModal(monthStr) {
     });
   }
 
+  // Reconcile contributions to the portfolio's month return. Stocks sold the
+  // next month have no measurable return, but their COMBINED contribution is
+  // known exactly (= month return - sum of the measured contributions). Spread
+  // that residual across them by weight so the Contrib column sums to the
+  // month's portfolio return. These filled values are marked estimated (~).
+  const monthRet = row.Base != null ? +(row.Base * 100).toFixed(2) : null;
+  if (monthRet != null) {
+    let known = 0, blankW = 0;
+    holds.forEach(h => {
+      if (h.w == null) return;
+      if (h.r != null) known += h.w / 100 * h.r;
+      else blankW += h.w;
+    });
+    if (blankW > 0.0001) {
+      const implied = (monthRet - known) / (blankW / 100);
+      holds.forEach(h => { if (h.r == null && h.w != null) { h.r = +implied.toFixed(2); h.est = true; } });
+    }
+  }
+
   // Attach sector + expose for the investment calculator (recalcInvest)
   holds.forEach(h => { h.sec = h.sec || smap[h.s] || '—'; });
   window.__invHolds = holds;
@@ -478,14 +497,19 @@ function openHeatModal(monthStr) {
               <td class="mono" style="font-weight:700">${h.s}</td>
               <td class="text-muted" style="font-size:.68rem">${h.sec}</td>
               <td class="mono">${h.w != null ? h.w + '%' : '—'}</td>
-              <td class="mono ${h.r == null ? 'text-muted' : (h.r >= 0 ? 'text-emerald' : 'text-rose')}">${h.r != null ? (h.r >= 0 ? '+' : '') + h.r + '%' : '—'}</td>
-              <td class="mono ${contrib == null ? 'text-muted' : (contrib >= 0 ? 'text-emerald' : 'text-rose')}">${contrib != null ? (contrib >= 0 ? '+' : '') + contrib + '%' : '—'}</td>
+              <td class="mono ${h.r == null ? 'text-muted' : (h.r >= 0 ? 'text-emerald' : 'text-rose')}"${h.est ? ' title="Estimated — stock left the portfolio next month; return inferred from the residual so contributions sum to the month return."' : ''}>${h.r != null ? (h.est ? '~' : '') + (h.r >= 0 ? '+' : '') + h.r + '%' : '—'}</td>
+              <td class="mono ${contrib == null ? 'text-muted' : (contrib >= 0 ? 'text-emerald' : 'text-rose')}">${contrib != null ? (h.est ? '~' : '') + (contrib >= 0 ? '+' : '') + contrib + '%' : '—'}</td>
               <td class="mono">${h.p != null ? fmtINR(h.p) : '—'}</td>
               <td class="mono text-cyan" id="iq${i}" style="font-weight:700">—</td>
               <td class="mono text-emerald" id="ia${i}">—</td>
             </tr>`; }).join('')}
           </tbody>
           <tfoot>
+            <tr style="border-top:1px solid var(--border)">
+              <td colspan="5" class="text-muted" style="font-size:.68rem;text-align:right">Portfolio Return (month)</td>
+              <td class="mono ${monthRet != null && monthRet >= 0 ? 'text-emerald' : 'text-rose'}" style="font-weight:700">${monthRet != null ? (monthRet >= 0 ? '+' : '') + monthRet + '%' : '—'}</td>
+              <td colspan="3"></td>
+            </tr>
             <tr style="border-top:1px solid var(--border)">
               <td colspan="8" class="text-muted" style="font-size:.68rem;text-align:right">Total Invested</td>
               <td class="mono text-emerald" id="inv-total" style="font-weight:700">—</td>
