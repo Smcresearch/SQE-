@@ -408,12 +408,28 @@ function openHeatModal(monthStr) {
                 : state.universe === 'nifty500' ? 'vs Nifty 500'
                 : 'vs Nifty 500';
 
-  // Base SIM portfolio held during this month (from holdings.js); sectors via sector_map
-  const holds = (typeof MONTHLY_HOLDINGS !== 'undefined' && MONTHLY_HOLDINGS[monthStr]) || [];
+  // Portfolio held during this month. Past months come from holdings.js snapshots;
+  // the current/live month has no snapshot yet, so fall back to current_portfolio.
   const smap = DASHBOARD_DATA.sector_map || {};
+  let holds = (typeof MONTHLY_HOLDINGS !== 'undefined' && MONTHLY_HOLDINGS[monthStr]) || [];
+  let portoLabel = 'Base SIM Portfolio';
+  if (!holds.length) {
+    const cp = (d.current_portfolio || []).filter(s => s.clean_symbol && s.clean_symbol !== 'Stock');
+    const liveMonth = String((cp.find(s => s.date) || {}).date || DASHBOARD_DATA.last_update || '').slice(0, 7);
+    if (cp.length && monthStr === liveMonth) {
+      holds = cp.map(s => ({
+        s: s.clean_symbol,
+        sec: s.sector,
+        w: s.weight != null ? +(s.weight * 100).toFixed(2) : null,
+        st: s.status || '—',
+        a: s.action || '—'
+      }));
+      portoLabel = 'Live Portfolio';
+    }
+  }
   const holdingsHtml = `
     <div style="margin-top:1.25rem">
-      <div class="modal-metric" style="margin-bottom:.5rem">Base SIM Portfolio — ${holds.length} Holding${holds.length === 1 ? '' : 's'}</div>
+      <div class="modal-metric" style="margin-bottom:.5rem">${portoLabel} — ${holds.length} Holding${holds.length === 1 ? '' : 's'}</div>
       ${holds.length ? `
       <div style="border:1px solid var(--border);border-radius:.5rem;overflow:hidden">
         <table class="data-table mini-table">
@@ -427,8 +443,8 @@ function openHeatModal(monthStr) {
             ${holds.map((h, i) => `<tr>
               <td class="text-muted mono" style="font-size:.65rem">${i + 1}</td>
               <td class="mono" style="font-weight:700">${h.s}</td>
-              <td class="text-muted" style="font-size:.68rem">${smap[h.s] || '—'}</td>
-              <td class="mono">${h.w}%</td>
+              <td class="text-muted" style="font-size:.68rem">${h.sec || smap[h.s] || '—'}</td>
+              <td class="mono">${h.w != null ? h.w + '%' : '—'}</td>
               <td class="mono ${h.st === 'Added' ? 'text-emerald' : 'text-muted'}" style="font-size:.68rem">${h.st}</td>
               <td class="mono ${(h.a || '').includes('BUY') ? 'text-emerald' : (h.a || '').includes('SELL') ? 'text-rose' : 'text-muted'}" style="font-size:.68rem">${h.a}</td>
             </tr>`).join('')}
