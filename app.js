@@ -427,10 +427,24 @@ function openHeatModal(monthStr) {
       portoLabel = 'Live Portfolio';
     }
   }
-  // Note: a past month's Return is that month's own return (next month's
-  // formation price / this month's - 1), never the current price. The latest
-  // snapshot month has no following month yet, so its returns stay "—" until
-  // the next month's data exists.
+  // A past month's Return is that month's own return (next month's formation
+  // price / this month's - 1), never the current price. The latest snapshot
+  // month has no following snapshot, so recover ITS end-of-month price from the
+  // live portfolio: ltp / (1 + MTD%) ~= start of next month ~= end of this
+  // month. That keeps the figure bounded to the month (not a current-price move).
+  const snapMonths = (typeof MONTHLY_HOLDINGS !== 'undefined') ? Object.keys(MONTHLY_HOLDINGS).sort() : [];
+  const lastSnap = snapMonths.length ? snapMonths[snapMonths.length - 1] : null;
+  if (holds.length && monthStr === lastSnap) {
+    const liveBy = {};
+    (d.current_portfolio || []).forEach(s => { if (s.clean_symbol) liveBy[s.clean_symbol] = s; });
+    holds.forEach(h => {
+      const s = liveBy[h.s];
+      if (h.r == null && h.p && s && s.ltp != null && s.mtd_change_pct != null) {
+        const endPx = s.ltp / (1 + s.mtd_change_pct / 100);
+        if (endPx > 0) h.r = +((endPx / h.p - 1) * 100).toFixed(2);
+      }
+    });
+  }
 
   // Attach sector + expose for the investment calculator (recalcInvest)
   holds.forEach(h => { h.sec = h.sec || smap[h.s] || '—'; });
