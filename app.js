@@ -1259,54 +1259,42 @@ window.recalcPortInvest = recalcPortInvest;
 /* ══════════════════════════════════════════════
    TRADES
 ══════════════════════════════════════════════ */
-// Classify each holding's change vs last month's portfolio.
-function changeIndicator(h) {
-  const m = String(h.action || '').toUpperCase().match(/(BUY|SELL)\s+(\d+)/);
-  const dir = m ? m[1] : '';
-  const delta = m ? +m[2] : 0;
-  if (h.status === 'Added') return { icon: '🔥', label: 'New',       color: '#22d3ee', rank: 0 };
-  if (dir === 'BUY'  && delta > 0) return { icon: '▲', label: 'Increased', color: '#10b981', rank: 1 };
-  if (dir === 'SELL' && delta > 0) return { icon: '▼', label: 'Decreased', color: '#f43f5e', rank: 2 };
-  return { icon: '↔', label: 'No change', color: '#94a3b8', rank: 3 };
-}
-
 function renderTrades(d) {
   // Portfolio Changes view: every current holding vs last month's portfolio.
+  // Previous weight/price come from the most recent snapshot before this month,
+  // so the "Change" can be computed at the user's chosen investment amount.
   const port = (d.current_portfolio || []).filter(s => s.clean_symbol && s.clean_symbol !== 'Stock');
-  window.__chgHolds = port.map(s => ({
-    s: s.clean_symbol,
-    sec: s.sector || '—',
-    w: s.weight != null ? +(s.weight * 100).toFixed(2) : null,
-    p: (s.ltp != null && s.ltp > 0) ? +(+s.ltp).toFixed(2) : null,
-    action: s.action || '',
-    status: s.status || ''
-  }));
-  // Group by what changed (new -> increased -> decreased -> unchanged), then weight.
-  window.__chgHolds.forEach(h => { h.ind = changeIndicator(h); });
-  window.__chgHolds.sort((a, b) => a.ind.rank - b.ind.rank || (b.w || 0) - (a.w || 0));
+  const snap = (typeof MONTHLY_HOLDINGS !== 'undefined') ? MONTHLY_HOLDINGS : {};
+  const liveMonth = String((port.find(s => s.date) || {}).date || DASHBOARD_DATA.last_update || '').slice(0, 7);
+  const prevMonths = Object.keys(snap).sort().filter(m => !liveMonth || m < liveMonth);
+  const prevHolds = prevMonths.length ? snap[prevMonths[prevMonths.length - 1]] : [];
+  const prevBy = {};
+  prevHolds.forEach(x => { prevBy[x.s] = x; });
 
-  document.getElementById('tradesBody').innerHTML = window.__chgHolds.map((h, i) => {
-    const act = String(h.action || '').toUpperCase();
-    const actCol = act.includes('BUY') ? 'text-emerald' : act.includes('SELL') ? 'text-rose' : 'text-muted';
-    return `<tr>
-      <td title="${h.ind.label}" style="text-align:center;font-size:.9rem;color:${h.ind.color}">${h.ind.icon}</td>
-      <td class="mono" style="font-weight:700">${h.s}</td>
-      <td class="text-muted" style="font-size:.7rem">${h.sec}</td>
-      <td class="mono ${actCol}" style="font-weight:700;font-size:.72rem">${h.action || '—'}</td>
-      <td class="mono">${h.w != null ? h.w + '%' : '—'}</td>
-      <td class="mono">${h.p != null ? '₹' + h.p.toLocaleString('en-IN') : '—'}</td>
-      <td class="mono text-cyan" id="cq${i}" style="font-weight:700">—</td>
-      <td class="mono text-emerald" id="ca${i}">—</td>
-    </tr>`;
-  }).join('');
+  window.__chgHolds = port.map(s => {
+    const prev = prevBy[s.clean_symbol];
+    return {
+      s: s.clean_symbol,
+      sec: s.sector || '—',
+      w: s.weight != null ? +(s.weight * 100).toFixed(2) : null,
+      p: (s.ltp != null && s.ltp > 0) ? +(+s.ltp).toFixed(2) : null,
+      prevW: prev ? prev.w : null,
+      prevP: (prev && prev.p > 0) ? prev.p : null,
+      isNew: !prev
+    };
+  });
 
   const ca = document.getElementById('cinv-amt');
   if (ca) ca.value = sharedInvestAmount;   // reflect the shared amount
   recalcChangesInvest();
 }
 
-/* Investment calculator for the Portfolio Changes tab (own 'c'-prefixed ids,
-   shares sharedInvestAmount with the Live Portfolio tab). */
+/* Portfolio Changes calculator. The Change column is the share adjustment the
+   USER would make to rebalance from last month's portfolio to the current one
+   at the chosen Invest amount: current qty - previous qty (both whole shares,
+   min 1). The indicator (🔥 new / ▲ up / ▼ down / ↔ same) follows that delta,
+   so it updates live as the amount changes. Shares sharedInvestAmount with the
+   Live Portfolio tab. */
 function recalcChangesInvest() {
   const holds = window.__chgHolds || [];
   const amtEl = document.getElementById('cinv-amt');
@@ -1314,22 +1302,43 @@ function recalcChangesInvest() {
   const total = Math.max(0, +amtEl.value || 0);
   sharedInvestAmount = total;   // keep the Live Portfolio tab in sync
   const fmt = (n) => '₹' + Math.round(n).toLocaleString('en-IN');
-  let invested = 0;
-  holds.forEach((h, i) => {
-    const qEl = document.getElementById('cq' + i);
-    const aEl = document.getElementById('ca' + i);
-    if (!qEl || !aEl) return;
-    if (h.p && h.p > 0 && h.w != null) {
-      const qty = Math.max(1, Math.floor((total * (h.w / 100)) / h.p));
-      const cost = qty * h.p;
-      invested += cost;
-      qEl.textContent = qty.toLocaleString('en-IN');
-      aEl.textContent = fmt(cost);
+  const qtyAt = (w, p) => (p > 0 && w != null) ? Math.max(1, Math.floor((total * (w / 100)) / p)) : null;
+
+  holds.forEach(h => {
+    h.curQty = qtyAt(h.w, h.p);
+    h.cost = h.curQty != null ? h.curQty * h.p : 0;
+    if (h.isNew || h.prevW == null || h.prevP == null) {
+      h.change = h.curQty;   // a brand-new position: buy the whole thing
+      h.ind = { icon: '🔥', label: 'New', color: '#22d3ee', rank: 0 };
     } else {
-      qEl.textContent = '—';
-      aEl.textContent = '—';
+      const prevQty = qtyAt(h.prevW, h.prevP) || 0;
+      h.change = (h.curQty || 0) - prevQty;
+      if (h.change > 0)      h.ind = { icon: '▲', label: 'Increased', color: '#10b981', rank: 1 };
+      else if (h.change < 0) h.ind = { icon: '▼', label: 'Decreased', color: '#f43f5e', rank: 2 };
+      else                   h.ind = { icon: '↔', label: 'No change', color: '#94a3b8', rank: 3 };
     }
   });
+  holds.sort((a, b) => a.ind.rank - b.ind.rank || (b.w || 0) - (a.w || 0));
+
+  let invested = 0;
+  document.getElementById('tradesBody').innerHTML = holds.map(h => {
+    if (h.curQty != null) invested += h.cost;
+    const chg = h.change;
+    const chgTxt = h.ind.rank === 0
+      ? 'NEW +' + (chg || 0)
+      : (chg > 0 ? '+' + chg : (chg < 0 ? String(chg) : '0'));
+    return `<tr>
+      <td title="${h.ind.label}" style="text-align:center;font-size:.9rem;color:${h.ind.color}">${h.ind.icon}</td>
+      <td class="mono" style="font-weight:700">${h.s}</td>
+      <td class="text-muted" style="font-size:.7rem">${h.sec}</td>
+      <td class="mono" style="font-weight:700;color:${h.ind.color}">${chgTxt}</td>
+      <td class="mono">${h.w != null ? h.w + '%' : '—'}</td>
+      <td class="mono">${h.p != null ? '₹' + h.p.toLocaleString('en-IN') : '—'}</td>
+      <td class="mono text-cyan" style="font-weight:700">${h.curQty != null ? h.curQty.toLocaleString('en-IN') : '—'}</td>
+      <td class="mono text-emerald">${h.curQty != null ? fmt(h.cost) : '—'}</td>
+    </tr>`;
+  }).join('');
+
   const cash = total - invested;
   const tEl = document.getElementById('cinv-total');
   const cEl = document.getElementById('cinv-cash');
