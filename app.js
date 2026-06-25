@@ -470,7 +470,7 @@ function openHeatModal(monthStr) {
             <col style="width:4%"><col style="width:16%"><col style="width:20%"><col style="width:10%"><col style="width:11%"><col style="width:13%"><col style="width:9%"><col style="width:17%">
           </colgroup>
           <thead><tr>
-            <th>#</th><th>Stock</th><th>Sector</th><th>Weight</th><th>Return</th><th>Price</th><th>Qty</th><th>Amount</th>
+            <th>#</th><th>Stock</th><th>Sector</th><th>Weight</th><th title="That month's own return. Blank when the stock isn't held the following month, so there's no next price to measure it against.">Return</th><th>Price</th><th>Qty</th><th>Amount</th>
           </tr></thead>
           <tbody>
             ${holds.map((h, i) => `<tr>
