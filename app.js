@@ -427,6 +427,19 @@ function openHeatModal(monthStr) {
       portoLabel = 'Live Portfolio';
     }
   }
+  // The latest snapshot month has no following snapshot to measure returns
+  // against, so estimate from live prices (ltp / formation price - 1) for any
+  // holding still in the live portfolio.
+  const snapMonths = (typeof MONTHLY_HOLDINGS !== 'undefined') ? Object.keys(MONTHLY_HOLDINGS).sort() : [];
+  const lastSnap = snapMonths.length ? snapMonths[snapMonths.length - 1] : null;
+  if (holds.length && monthStr === lastSnap) {
+    const ltpBy = {};
+    (d.current_portfolio || []).forEach(s => { if (s.clean_symbol) ltpBy[s.clean_symbol] = s.ltp; });
+    holds.forEach(h => {
+      if (h.r == null && h.p && ltpBy[h.s] != null) h.r = +((ltpBy[h.s] / h.p - 1) * 100).toFixed(2);
+    });
+  }
+
   // Attach sector + expose for the investment calculator (recalcInvest)
   holds.forEach(h => { h.sec = h.sec || smap[h.s] || '—'; });
   window.__invHolds = holds;
