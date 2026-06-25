@@ -408,6 +408,32 @@ function openHeatModal(monthStr) {
                 : state.universe === 'nifty500' ? 'vs Nifty 500'
                 : 'vs Nifty 500';
 
+  // Base SIM portfolio held during this month (from holdings.js); sectors via sector_map
+  const holds = (typeof MONTHLY_HOLDINGS !== 'undefined' && MONTHLY_HOLDINGS[monthStr]) || [];
+  const smap = DASHBOARD_DATA.sector_map || {};
+  const holdingsHtml = `
+    <div style="margin-top:1.25rem">
+      <div class="modal-metric" style="margin-bottom:.5rem">Base SIM Portfolio — ${holds.length} Holding${holds.length === 1 ? '' : 's'}</div>
+      ${holds.length ? `
+      <div style="max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:.5rem">
+        <table class="data-table" style="font-size:.72rem;width:100%">
+          <thead><tr>
+            <th>#</th><th>Stock</th><th>Sector</th><th>Weight</th><th>Status</th><th>Action</th>
+          </tr></thead>
+          <tbody>
+            ${holds.map((h, i) => `<tr>
+              <td class="text-muted mono" style="font-size:.65rem">${i + 1}</td>
+              <td class="mono" style="font-weight:700">${h.s}</td>
+              <td class="text-muted" style="font-size:.68rem">${smap[h.s] || '—'}</td>
+              <td class="mono">${h.w}%</td>
+              <td class="mono ${h.st === 'Added' ? 'text-emerald' : 'text-muted'}" style="font-size:.68rem">${h.st}</td>
+              <td class="mono ${(h.a || '').includes('BUY') ? 'text-emerald' : (h.a || '').includes('SELL') ? 'text-rose' : 'text-muted'}" style="font-size:.68rem">${h.a}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>` : `<div class="text-muted" style="font-size:.75rem">No holdings snapshot available for this month.</div>`}
+    </div>`;
+
   bodyEl.innerHTML = `
     <div class="modal-row" style="background:rgba(34,211,238,0.05);border-radius:.5rem;padding:.75rem;grid-template-columns:repeat(4,1fr)">
       <div>
@@ -445,7 +471,8 @@ function openHeatModal(monthStr) {
           </div>
         </div>`;
       }).join('')}
-    </div>`;
+    </div>
+    ${holdingsHtml}`;
 
   document.getElementById('hmModal').classList.add('open');
 }
