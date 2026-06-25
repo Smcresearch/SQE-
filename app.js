@@ -470,6 +470,13 @@ function openHeatModal(monthStr) {
   window.__invHolds = holds;
 
   const fmtINR = (n) => '₹' + Math.round(n).toLocaleString('en-IN');
+  // Past months: the price is that month's formation/entry price (the buy price).
+  // Live month: it is the current LTP, so label it accordingly.
+  const isLivePort = portoLabel === 'Live Portfolio';
+  const priceHdr = isLivePort ? 'LTP' : 'Avg Buy Price';
+  const priceTitle = isLivePort
+    ? 'Live last-traded price'
+    : "Entry (formation) price for this month's portfolio — what it was bought at";
   const holdingsHtml = `
     <div style="margin-top:1.25rem">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:.6rem">
@@ -489,7 +496,7 @@ function openHeatModal(monthStr) {
             <col style="width:4%"><col style="width:14%"><col style="width:17%"><col style="width:9%"><col style="width:10%"><col style="width:11%"><col style="width:12%"><col style="width:8%"><col style="width:15%">
           </colgroup>
           <thead><tr>
-            <th>#</th><th>Stock</th><th>Sector</th><th>Weight</th><th title="That month's own return. Blank when the stock isn't held the following month, so there's no next price to measure it against.">Return</th><th title="Weight × that month's return = the stock's contribution to the portfolio's return. The column sums to the portfolio return.">Contrib</th><th>Price</th><th>Qty</th><th>Amount</th>
+            <th>#</th><th>Stock</th><th>Sector</th><th>Weight</th><th title="That month's own return. Blank when the stock isn't held the following month, so there's no next price to measure it against.">Return</th><th title="Weight × that month's return = the stock's contribution to the portfolio's return. The column sums to the portfolio return.">Contrib</th><th title="${priceTitle}">${priceHdr}</th><th>Qty</th><th>Amount</th>
           </tr></thead>
           <tbody>
             ${holds.map((h, i) => { const contrib = (h.r != null && h.w != null) ? +(h.w / 100 * h.r).toFixed(2) : null; return `<tr>
