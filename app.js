@@ -26,6 +26,9 @@ let state = {
 };
 const charts = {};
 
+// Shared investment amount across the Live Portfolio and Portfolio Changes tabs.
+let sharedInvestAmount = 100000;
+
 /* ── GLOBALS ─────────────────────────────────── */
 function switchUniverse(u) {
   state.universe = u;
@@ -1209,6 +1212,8 @@ function renderPortfolio(d) {
     </tr>`;
   }).join('');
 
+  const pa = document.getElementById('pinv-amt');
+  if (pa) pa.value = sharedInvestAmount;   // reflect the shared amount
   recalcPortInvest();
   renderSectorPie('portSector', cleanPort);
 }
@@ -1220,6 +1225,7 @@ function recalcPortInvest() {
   const amtEl = document.getElementById('pinv-amt');
   if (!amtEl) return;
   const total = Math.max(0, +amtEl.value || 0);
+  sharedInvestAmount = total;   // keep the Portfolio Changes tab in sync
   const fmt = (n) => '₹' + Math.round(n).toLocaleString('en-IN');
   let invested = 0;
   holds.forEach((h, i) => {
@@ -1253,20 +1259,89 @@ window.recalcPortInvest = recalcPortInvest;
 /* ══════════════════════════════════════════════
    TRADES
 ══════════════════════════════════════════════ */
+// Classify each holding's change vs last month's portfolio.
+function changeIndicator(h) {
+  const m = String(h.action || '').toUpperCase().match(/(BUY|SELL)\s+(\d+)/);
+  const dir = m ? m[1] : '';
+  const delta = m ? +m[2] : 0;
+  if (h.status === 'Added') return { icon: '🔥', label: 'New',       color: '#22d3ee', rank: 0 };
+  if (dir === 'BUY'  && delta > 0) return { icon: '▲', label: 'Increased', color: '#10b981', rank: 1 };
+  if (dir === 'SELL' && delta > 0) return { icon: '▼', label: 'Decreased', color: '#f43f5e', rank: 2 };
+  return { icon: '↔', label: 'No change', color: '#94a3b8', rank: 3 };
+}
+
 function renderTrades(d) {
-  document.getElementById('tradesBody').innerHTML = [...d.exec_history].reverse().slice(0,50).map(t => {
-    const ret = (t.return||0)*100;
+  // Portfolio Changes view: every current holding vs last month's portfolio.
+  const port = (d.current_portfolio || []).filter(s => s.clean_symbol && s.clean_symbol !== 'Stock');
+  window.__chgHolds = port.map(s => ({
+    s: s.clean_symbol,
+    sec: s.sector || '—',
+    w: s.weight != null ? +(s.weight * 100).toFixed(2) : null,
+    p: (s.ltp != null && s.ltp > 0) ? +(+s.ltp).toFixed(2) : null,
+    action: s.action || '',
+    status: s.status || ''
+  }));
+  // Group by what changed (new -> increased -> decreased -> unchanged), then weight.
+  window.__chgHolds.forEach(h => { h.ind = changeIndicator(h); });
+  window.__chgHolds.sort((a, b) => a.ind.rank - b.ind.rank || (b.w || 0) - (a.w || 0));
+
+  document.getElementById('tradesBody').innerHTML = window.__chgHolds.map((h, i) => {
+    const act = String(h.action || '').toUpperCase();
+    const actCol = act.includes('BUY') ? 'text-emerald' : act.includes('SELL') ? 'text-rose' : 'text-muted';
     return `<tr>
-      <td class="mono text-muted">${t.month}</td>
-      <td class="mono" style="font-weight:700">${t.symbol.split('_')[0]}</td>
-      <td class="text-muted" style="font-size:.72rem">${t.sector||'—'}</td>
-      <td class="mono ${(t.action||'').includes('BUY')?'text-emerald':'text-rose'}" style="font-weight:700">${t.action||'—'}</td>
-      <td class="mono">${(t.qty||0).toLocaleString()}</td>
-      <td class="mono">₹${(t.price||0).toFixed(2)}</td>
-      <td class="mono ${ret>=0?'text-emerald':'text-rose'}" style="font-weight:700">${ret>=0?'+':''}${ret.toFixed(2)}%</td>
+      <td title="${h.ind.label}" style="text-align:center;font-size:.9rem;color:${h.ind.color}">${h.ind.icon}</td>
+      <td class="mono" style="font-weight:700">${h.s}</td>
+      <td class="text-muted" style="font-size:.7rem">${h.sec}</td>
+      <td class="mono ${actCol}" style="font-weight:700;font-size:.72rem">${h.action || '—'}</td>
+      <td class="mono">${h.w != null ? h.w + '%' : '—'}</td>
+      <td class="mono">${h.p != null ? '₹' + h.p.toLocaleString('en-IN') : '—'}</td>
+      <td class="mono text-cyan" id="cq${i}" style="font-weight:700">—</td>
+      <td class="mono text-emerald" id="ca${i}">—</td>
     </tr>`;
   }).join('');
+
+  const ca = document.getElementById('cinv-amt');
+  if (ca) ca.value = sharedInvestAmount;   // reflect the shared amount
+  recalcChangesInvest();
 }
+
+/* Investment calculator for the Portfolio Changes tab (own 'c'-prefixed ids,
+   shares sharedInvestAmount with the Live Portfolio tab). */
+function recalcChangesInvest() {
+  const holds = window.__chgHolds || [];
+  const amtEl = document.getElementById('cinv-amt');
+  if (!amtEl) return;
+  const total = Math.max(0, +amtEl.value || 0);
+  sharedInvestAmount = total;   // keep the Live Portfolio tab in sync
+  const fmt = (n) => '₹' + Math.round(n).toLocaleString('en-IN');
+  let invested = 0;
+  holds.forEach((h, i) => {
+    const qEl = document.getElementById('cq' + i);
+    const aEl = document.getElementById('ca' + i);
+    if (!qEl || !aEl) return;
+    if (h.p && h.p > 0 && h.w != null) {
+      const qty = Math.max(1, Math.floor((total * (h.w / 100)) / h.p));
+      const cost = qty * h.p;
+      invested += cost;
+      qEl.textContent = qty.toLocaleString('en-IN');
+      aEl.textContent = fmt(cost);
+    } else {
+      qEl.textContent = '—';
+      aEl.textContent = '—';
+    }
+  });
+  const cash = total - invested;
+  const tEl = document.getElementById('cinv-total');
+  const cEl = document.getElementById('cinv-cash');
+  const clEl = document.getElementById('cinv-cash-label');
+  if (tEl) tEl.textContent = fmt(invested);
+  if (clEl) clEl.textContent = cash < 0 ? 'Extra Needed (min 1 share each)' : 'Cash Left';
+  if (cEl) {
+    cEl.textContent = (cash < 0 ? '-' : '') + fmt(Math.abs(cash));
+    cEl.style.color = cash < 0 ? 'var(--rose)' : 'var(--slate)';
+  }
+}
+window.recalcChangesInvest = recalcChangesInvest;
 
 /* ══════════════════════════════════════════════
    HELPERS
