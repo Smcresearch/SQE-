@@ -415,8 +415,11 @@ function openHeatModal(monthStr) {
     <div style="margin-top:1.25rem">
       <div class="modal-metric" style="margin-bottom:.5rem">Base SIM Portfolio — ${holds.length} Holding${holds.length === 1 ? '' : 's'}</div>
       ${holds.length ? `
-      <div style="max-height:420px;overflow-y:auto;border:1px solid var(--border);border-radius:.5rem">
-        <table class="data-table" style="font-size:.72rem;width:100%">
+      <div style="border:1px solid var(--border);border-radius:.5rem;overflow:hidden">
+        <table class="data-table mini-table">
+          <colgroup>
+            <col style="width:7%"><col style="width:22%"><col style="width:29%"><col style="width:13%"><col style="width:14%"><col style="width:15%">
+          </colgroup>
           <thead><tr>
             <th>#</th><th>Stock</th><th>Sector</th><th>Weight</th><th>Status</th><th>Action</th>
           </tr></thead>

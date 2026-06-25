@@ -677,6 +677,16 @@ body::before {
 
 .modal-body {}
 
+/* Compact, fixed-layout holdings table inside the heatmap modal so the whole
+   portfolio fits the modal width (no horizontal scroll) and wraps as needed. */
+.mini-table { table-layout: fixed; width: 100%; }
+.mini-table th, .mini-table td {
+  padding: .42rem .55rem;
+  font-size: .72rem;
+  white-space: normal;
+  word-break: break-word;
+}
+
 .modal-row {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
