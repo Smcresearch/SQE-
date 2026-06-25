@@ -469,7 +469,7 @@ function openHeatModal(monthStr) {
               <td class="mono text-emerald" id="inv-total" style="font-weight:700">—</td>
             </tr>
             <tr>
-              <td colspan="6" class="text-muted" style="font-size:.68rem;text-align:right">Cash Left</td>
+              <td colspan="6" class="text-muted" id="inv-cash-label" style="font-size:.68rem;text-align:right">Cash Left</td>
               <td class="mono" id="inv-cash" style="color:var(--slate)">—</td>
             </tr>
           </tfoot>
@@ -537,7 +537,9 @@ function recalcInvest() {
     const aEl = document.getElementById('ia' + i);
     if (!qEl || !aEl) return;
     if (h.p && h.p > 0 && h.w != null) {
-      const qty = Math.floor((total * (h.w / 100)) / h.p);
+      // Buy a minimum of 1 share of every holding, even if the weighted
+      // allocation alone wouldn't cover it (the total adjusts upward).
+      const qty = Math.max(1, Math.floor((total * (h.w / 100)) / h.p));
       const cost = qty * h.p;
       invested += cost;
       qEl.textContent = qty.toLocaleString('en-IN');
@@ -547,10 +549,16 @@ function recalcInvest() {
       aEl.textContent = '—';
     }
   });
+  const cash = total - invested;
   const tEl = document.getElementById('inv-total');
   const cEl = document.getElementById('inv-cash');
+  const clEl = document.getElementById('inv-cash-label');
   if (tEl) tEl.textContent = fmt(invested);
-  if (cEl) cEl.textContent = fmt(total - invested);
+  if (clEl) clEl.textContent = cash < 0 ? 'Extra Needed (min 1 share each)' : 'Cash Left';
+  if (cEl) {
+    cEl.textContent = (cash < 0 ? '-' : '') + fmt(Math.abs(cash));
+    cEl.style.color = cash < 0 ? 'var(--rose)' : 'var(--slate)';
+  }
 }
 window.recalcInvest = recalcInvest;
 
