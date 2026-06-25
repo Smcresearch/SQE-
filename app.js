@@ -421,7 +421,8 @@ function openHeatModal(monthStr) {
         s: s.clean_symbol,
         sec: s.sector,
         w: s.weight != null ? +(s.weight * 100).toFixed(2) : null,
-        p: s.ltp != null ? +(+s.ltp).toFixed(2) : null
+        p: s.ltp != null ? +(+s.ltp).toFixed(2) : null,
+        r: s.mtd_change_pct != null ? +(+s.mtd_change_pct).toFixed(2) : null
       }));
       portoLabel = 'Live Portfolio';
     }
@@ -447,10 +448,10 @@ function openHeatModal(monthStr) {
       <div style="border:1px solid var(--border);border-radius:.5rem;overflow:hidden">
         <table class="data-table mini-table">
           <colgroup>
-            <col style="width:5%"><col style="width:19%"><col style="width:24%"><col style="width:11%"><col style="width:14%"><col style="width:10%"><col style="width:17%">
+            <col style="width:4%"><col style="width:16%"><col style="width:20%"><col style="width:10%"><col style="width:11%"><col style="width:13%"><col style="width:9%"><col style="width:17%">
           </colgroup>
           <thead><tr>
-            <th>#</th><th>Stock</th><th>Sector</th><th>Weight</th><th>Price</th><th>Qty</th><th>Amount</th>
+            <th>#</th><th>Stock</th><th>Sector</th><th>Weight</th><th>Return</th><th>Price</th><th>Qty</th><th>Amount</th>
           </tr></thead>
           <tbody>
             ${holds.map((h, i) => `<tr>
@@ -458,6 +459,7 @@ function openHeatModal(monthStr) {
               <td class="mono" style="font-weight:700">${h.s}</td>
               <td class="text-muted" style="font-size:.68rem">${h.sec}</td>
               <td class="mono">${h.w != null ? h.w + '%' : '—'}</td>
+              <td class="mono ${h.r == null ? 'text-muted' : (h.r >= 0 ? 'text-emerald' : 'text-rose')}">${h.r != null ? (h.r >= 0 ? '+' : '') + h.r + '%' : '—'}</td>
               <td class="mono">${h.p != null ? fmtINR(h.p) : '—'}</td>
               <td class="mono text-cyan" id="iq${i}" style="font-weight:700">—</td>
               <td class="mono text-emerald" id="ia${i}">—</td>
@@ -465,11 +467,11 @@ function openHeatModal(monthStr) {
           </tbody>
           <tfoot>
             <tr style="border-top:1px solid var(--border)">
-              <td colspan="6" class="text-muted" style="font-size:.68rem;text-align:right">Total Invested</td>
+              <td colspan="7" class="text-muted" style="font-size:.68rem;text-align:right">Total Invested</td>
               <td class="mono text-emerald" id="inv-total" style="font-weight:700">—</td>
             </tr>
             <tr>
-              <td colspan="6" class="text-muted" id="inv-cash-label" style="font-size:.68rem;text-align:right">Cash Left</td>
+              <td colspan="7" class="text-muted" id="inv-cash-label" style="font-size:.68rem;text-align:right">Cash Left</td>
               <td class="mono" id="inv-cash" style="color:var(--slate)">—</td>
             </tr>
           </tfoot>
