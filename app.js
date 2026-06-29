@@ -220,6 +220,7 @@ function renderTab(tab) {
   injectDualBenchmark();
   const d = D();
   if (!d) return;
+  renderBacktestPeriod(d);
   if (tab === 'overview')  renderOverview(d);
   if (tab === 'heatmap')   renderHeatmaps(d);
   if (tab === 'performance') renderPerformance(d);
@@ -229,6 +230,18 @@ function renderTab(tab) {
   if (tab === 'trades')    renderTrades(d);
   
   renderRegimeBadge(d);
+}
+
+/* Backtest period label — makes clear all metrics (CAGR, Sharpe, etc.) are
+   computed over the strategy's backtest window (derived from the data). */
+function renderBacktestPeriod(d) {
+  const el = document.getElementById('backtest-period');
+  if (!el) return;
+  const md = (d.monthly_detail || []).filter(r => /^\d{4}-\d{2}/.test(String(r.Month)));
+  if (!md.length) { el.textContent = ''; return; }
+  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const fmt = (m) => { const s = String(m).slice(0, 7); return MON[+s.slice(5, 7) - 1] + ' ' + s.slice(0, 4); };
+  el.textContent = `Backtest: ${fmt(md[0].Month)} – ${fmt(md[md.length - 1].Month)} · ${md.length} months · all metrics (CAGR, Sharpe, etc.) are computed over this period`;
 }
 
 /* ══════════════════════════════════════════════
