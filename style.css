@@ -617,6 +617,7 @@ body::before {
 
 .hm-cell.empty {
   background: rgba(255,255,255,.02) !important;
+  color: rgba(255,255,255,.18);
   cursor: default;
 }
 

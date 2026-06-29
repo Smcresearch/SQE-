@@ -351,7 +351,7 @@ function renderHeatmap(d, layer) {
     html += `<div class="hm-year">${yr}</div>`;
     grid[yr].forEach((val, mi) => {
       if (val === null) {
-        html += `<div class="hm-cell empty"></div>`;
+        html += `<div class="hm-cell empty" title="${yr}-${String(mi+1).padStart(2,'0')}: no data (before strategy inception)">–</div>`;
       } else {
         const bg = heatColor(val);
         const fg = Math.abs(val) > 4 ? '#fff' : 'rgba(255,255,255,0.5)';
