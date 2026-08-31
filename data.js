@@ -5592,11 +5592,11 @@ const DASHBOARD_DATA = {
     "total_months": 80,
     "live_performance": {
       "portfolio_ret": -0.05,
-      "benchmark_ret": -100.0,
-      "alpha": 99.95,
+      "benchmark_ret": -0.48,
+      "alpha": 0.43,
       "portfolio_mtd": -1.45,
-      "benchmark_mtd": -100.0,
-      "alpha_mtd": 98.55,
+      "benchmark_mtd": -1.2,
+      "alpha_mtd": -0.25,
       "indicator": "down"
     }
   },
@@ -11753,11 +11753,11 @@ const DASHBOARD_DATA = {
     "total_months": 80,
     "live_performance": {
       "portfolio_ret": 0.61,
-      "benchmark_ret": -100.0,
-      "alpha": 100.61,
+      "benchmark_ret": -0.33,
+      "alpha": 0.94,
       "portfolio_mtd": 6.92,
-      "benchmark_mtd": -100.0,
-      "alpha_mtd": 106.92,
+      "benchmark_mtd": 0.09,
+      "alpha_mtd": 6.83,
       "indicator": "up"
     }
   },
@@ -18346,11 +18346,11 @@ const DASHBOARD_DATA = {
     "total_months": 80,
     "live_performance": {
       "portfolio_ret": 0.71,
-      "benchmark_ret": -100.0,
-      "alpha": 100.71,
+      "benchmark_ret": -0.33,
+      "alpha": 1.04,
       "portfolio_mtd": 7.97,
-      "benchmark_mtd": -100.0,
-      "alpha_mtd": 107.97,
+      "benchmark_mtd": 0.09,
+      "alpha_mtd": 7.88,
       "indicator": "up"
     }
   },
@@ -19119,5 +19119,5 @@ const DASHBOARD_DATA = {
     "YATHARTH": "Healthcare",
     "ZAGGLE": "Information Technology"
   },
-  "last_update": "2026-08-30 17:40:09 IST"
+  "last_update": "2026-08-31 10:17:27 IST"
 };
