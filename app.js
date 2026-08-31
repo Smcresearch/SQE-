@@ -26,9 +26,6 @@ let state = {
 };
 const charts = {};
 
-// Shared investment amount across the Live Portfolio and Portfolio Changes tabs.
-let sharedInvestAmount = 100000;
-
 /* ── GLOBALS ─────────────────────────────────── */
 function switchUniverse(u) {
   state.universe = u;
@@ -227,8 +224,7 @@ function renderTab(tab) {
   if (tab === 'layers')    renderLayers(d);
   if (tab === 'churning')  renderChurning(d);
   if (tab === 'portfolio') renderPortfolio(d);
-  if (tab === 'trades')    renderTrades(d);
-  
+
   renderRegimeBadge(d);
 }
 
@@ -441,124 +437,28 @@ function openHeatModal(monthStr) {
 
   // Portfolio held during this month. Past months come from holdings.js snapshots;
   // the current/live month has no snapshot yet, so fall back to current_portfolio.
-  const smap = DASHBOARD_DATA.sector_map || {};
+  // Only the holding COUNT is shown publicly — the stock-by-stock breakdown
+  // (symbols, weights, quantities) is subscribers-only.
   let holds = (typeof MONTHLY_HOLDINGS !== 'undefined' && MONTHLY_HOLDINGS[monthStr]) || [];
   let portoLabel = 'SQE Portfolio';
   if (!holds.length) {
     const cp = (d.current_portfolio || []).filter(s => s.clean_symbol && s.clean_symbol !== 'Stock');
     if (cp.length && isLive) {
-      holds = cp.map(s => ({
-        s: s.clean_symbol,
-        sec: s.sector,
-        w: s.weight != null ? +(s.weight * 100).toFixed(2) : null,
-        p: s.ltp != null ? +(+s.ltp).toFixed(2) : null,
-        r: s.mtd_change_pct != null ? +(+s.mtd_change_pct).toFixed(2) : null
-      }));
+      holds = cp;
       portoLabel = 'Live Portfolio';
     }
   }
-  // A past month's Return is that month's own return (next month's formation
-  // price / this month's - 1), never the current price. The latest snapshot
-  // month has no following snapshot, so recover ITS end-of-month price from the
-  // live portfolio: ltp / (1 + MTD%) ~= start of next month ~= end of this
-  // month. That keeps the figure bounded to the month (not a current-price move).
-  const snapMonths = (typeof MONTHLY_HOLDINGS !== 'undefined') ? Object.keys(MONTHLY_HOLDINGS).sort() : [];
-  const lastSnap = snapMonths.length ? snapMonths[snapMonths.length - 1] : null;
-  if (holds.length && monthStr === lastSnap) {
-    const liveBy = {};
-    (d.current_portfolio || []).forEach(s => { if (s.clean_symbol) liveBy[s.clean_symbol] = s; });
-    holds.forEach(h => {
-      const s = liveBy[h.s];
-      if (h.r == null && h.p && s && s.ltp != null && s.mtd_change_pct != null) {
-        const endPx = s.ltp / (1 + s.mtd_change_pct / 100);
-        if (endPx > 0) h.r = +((endPx / h.p - 1) * 100).toFixed(2);
-      }
-    });
-  }
 
-  // Reconcile contributions to the portfolio's month return. Stocks sold the
-  // next month have no measurable return, but their COMBINED contribution is
-  // known exactly (= month return - sum of the measured contributions). Spread
-  // that residual across them by weight so the Contrib column sums to the
-  // month's portfolio return. These filled values are marked estimated (~).
   const monthRet = (isLive || row.Base == null) ? null : +(row.Base * 100).toFixed(2);
-  if (monthRet != null) {
-    let known = 0, blankW = 0;
-    holds.forEach(h => {
-      if (h.w == null) return;
-      if (h.r != null) known += h.w / 100 * h.r;
-      else blankW += h.w;
-    });
-    if (blankW > 0.0001) {
-      const implied = (monthRet - known) / (blankW / 100);
-      holds.forEach(h => { if (h.r == null && h.w != null) { h.r = +implied.toFixed(2); h.est = true; } });
-    }
-  }
+  const retCol = monthRet == null ? '#64748b' : (monthRet >= 0 ? '#10b981' : '#f43f5e');
 
-  // Attach sector + expose for the investment calculator (recalcInvest)
-  holds.forEach(h => { h.sec = h.sec || smap[h.s] || '—'; });
-  window.__invHolds = holds;
-
-  const fmtINR = (n) => '₹' + Math.round(n).toLocaleString('en-IN');
-  // Past months: the price is that month's formation/entry price (the buy price).
-  // Live month: it is the current LTP, so label it accordingly.
-  const isLivePort = portoLabel === 'Live Portfolio';
-  const priceHdr = isLivePort ? 'LTP' : 'Avg Buy Price';
-  const priceTitle = isLivePort
-    ? 'Live last-traded price'
-    : "Entry (formation) price for this month's portfolio — what it was bought at";
-  const holdingsHtml = `
-    <div style="margin-top:1.25rem">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:.6rem">
-        <div class="modal-metric">${portoLabel} — ${holds.length} Holding${holds.length === 1 ? '' : 's'}</div>
-        ${holds.length ? `<div style="display:flex;align-items:center;gap:.5rem">
-          <span class="modal-metric">Invest</span>
-          <span class="mono" style="color:var(--slate)">₹</span>
-          <input id="inv-amt" type="number" min="0" step="10000" value="100000" oninput="recalcInvest()"
-            style="width:130px;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:.4rem;
-                   color:var(--cyan);font-family:var(--mono);font-weight:700;padding:.35rem .5rem;font-size:.8rem">
-        </div>` : ''}
-      </div>
-      ${holds.length ? `
-      <div style="border:1px solid var(--border);border-radius:.5rem;overflow:hidden">
-        <table class="data-table mini-table">
-          <colgroup>
-            <col style="width:4%"><col style="width:14%"><col style="width:17%"><col style="width:9%"><col style="width:10%"><col style="width:11%"><col style="width:12%"><col style="width:8%"><col style="width:15%">
-          </colgroup>
-          <thead><tr>
-            <th>#</th><th>Stock</th><th>Sector</th><th>Weight</th><th title="That month's own return. Blank when the stock isn't held the following month, so there's no next price to measure it against.">Return</th><th title="Weight × that month's return = the stock's contribution to the portfolio's return. The column sums to the portfolio return.">Contrib</th><th title="${priceTitle}">${priceHdr}</th><th>Qty</th><th>Amount</th>
-          </tr></thead>
-          <tbody>
-            ${holds.map((h, i) => { const contrib = (h.r != null && h.w != null) ? +(h.w / 100 * h.r).toFixed(2) : null; return `<tr>
-              <td class="text-muted mono" style="font-size:.65rem">${i + 1}</td>
-              <td class="mono" style="font-weight:700">${h.s}</td>
-              <td class="text-muted" style="font-size:.68rem">${h.sec}</td>
-              <td class="mono">${h.w != null ? h.w + '%' : '—'}</td>
-              <td class="mono ${h.r == null ? 'text-muted' : (h.r >= 0 ? 'text-emerald' : 'text-rose')}"${h.est ? ' title="Estimated — stock left the portfolio next month; return inferred from the residual so contributions sum to the month return."' : ''}>${h.r != null ? (h.est ? '~' : '') + (h.r >= 0 ? '+' : '') + h.r + '%' : '—'}</td>
-              <td class="mono ${contrib == null ? 'text-muted' : (contrib >= 0 ? 'text-emerald' : 'text-rose')}">${contrib != null ? (h.est ? '~' : '') + (contrib >= 0 ? '+' : '') + contrib + '%' : '—'}</td>
-              <td class="mono">${h.p != null ? fmtINR(h.p) : '—'}</td>
-              <td class="mono text-cyan" id="iq${i}" style="font-weight:700">—</td>
-              <td class="mono text-emerald" id="ia${i}">—</td>
-            </tr>`; }).join('')}
-          </tbody>
-          <tfoot>
-            <tr style="border-top:1px solid var(--border)">
-              <td colspan="5" class="text-muted" style="font-size:.68rem;text-align:right">Portfolio Return (month)</td>
-              <td class="mono ${monthRet != null && monthRet >= 0 ? 'text-emerald' : 'text-rose'}" style="font-weight:700">${monthRet != null ? (monthRet >= 0 ? '+' : '') + monthRet + '%' : '—'}</td>
-              <td colspan="3"></td>
-            </tr>
-            <tr style="border-top:1px solid var(--border)">
-              <td colspan="8" class="text-muted" style="font-size:.68rem;text-align:right">Total Invested</td>
-              <td class="mono text-emerald" id="inv-total" style="font-weight:700">—</td>
-            </tr>
-            <tr>
-              <td colspan="8" class="text-muted" id="inv-cash-label" style="font-size:.68rem;text-align:right">Cash Left</td>
-              <td class="mono" id="inv-cash" style="color:var(--slate)">—</td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>` : `<div class="text-muted" style="font-size:.75rem">No holdings snapshot available for this month.</div>`}
-    </div>`;
+  const holdingsHtml = holds.length ? `
+    <div class="crisis-card" style="margin-top:1.25rem;text-align:center;padding:1.5rem 1rem">
+      <div class="modal-metric" style="margin-bottom:.5rem">${portoLabel} — ${holds.length} Holding${holds.length === 1 ? '' : 's'}</div>
+      <div class="modal-val" style="color:${retCol}">${monthRet != null ? (monthRet >= 0 ? '+' : '') + monthRet + '%' : '—'}</div>
+      <div class="text-muted" style="font-size:.7rem;margin-top:.15rem">Portfolio Return (month)</div>
+      <div class="text-muted" style="font-size:.75rem;margin-top:.75rem">🔒 Stock-by-stock breakdown — symbols, weights, quantities — is available exclusively to smallcase subscribers.</div>
+    </div>` : `<div class="text-muted" style="margin-top:1.25rem;font-size:.75rem">No holdings snapshot available for this month.</div>`;
 
   bodyEl.innerHTML = `
     <div class="modal-row" style="background:rgba(34,211,238,0.05);border-radius:.5rem;padding:.75rem;grid-template-columns:repeat(4,1fr)">
@@ -601,49 +501,9 @@ function openHeatModal(monthStr) {
     ${holdingsHtml}`;
 
   document.getElementById('hmModal').classList.add('open');
-  recalcInvest();   // populate Qty/Amount for the default ₹1,00,000
 }
 
 window.openHeatModal = openHeatModal;
-
-/* Investment calculator: split the entered amount across holdings by weight,
-   buy whole shares at each price, and show qty + cost per stock with totals. */
-function recalcInvest() {
-  const holds = window.__invHolds || [];
-  const amtEl = document.getElementById('inv-amt');
-  if (!amtEl) return;
-  const total = Math.max(0, +amtEl.value || 0);
-  const fmt = (n) => '₹' + Math.round(n).toLocaleString('en-IN');
-  let invested = 0;
-  holds.forEach((h, i) => {
-    const qEl = document.getElementById('iq' + i);
-    const aEl = document.getElementById('ia' + i);
-    if (!qEl || !aEl) return;
-    if (h.p && h.p > 0 && h.w != null) {
-      // Buy a minimum of 1 share of every holding, even if the weighted
-      // allocation alone wouldn't cover it (the total adjusts upward).
-      const qty = Math.max(1, Math.floor((total * (h.w / 100)) / h.p));
-      const cost = qty * h.p;
-      invested += cost;
-      qEl.textContent = qty.toLocaleString('en-IN');
-      aEl.textContent = fmt(cost);
-    } else {
-      qEl.textContent = '—';
-      aEl.textContent = '—';
-    }
-  });
-  const cash = total - invested;
-  const tEl = document.getElementById('inv-total');
-  const cEl = document.getElementById('inv-cash');
-  const clEl = document.getElementById('inv-cash-label');
-  if (tEl) tEl.textContent = fmt(invested);
-  if (clEl) clEl.textContent = cash < 0 ? 'Extra Needed (min 1 share each)' : 'Cash Left';
-  if (cEl) {
-    cEl.textContent = (cash < 0 ? '-' : '') + fmt(Math.abs(cash));
-    cEl.style.color = cash < 0 ? 'var(--rose)' : 'var(--slate)';
-  }
-}
-window.recalcInvest = recalcInvest;
 
 /* ══════════════════════════════════════════════
    EQUITY CURVES
@@ -653,7 +513,6 @@ function renderPerformance(d) {
     renderEquity(d);
     renderDrawdown(d);
     renderRollingSharpe(d);
-    renderCorrelation(d);
     renderAttribution(d);
     renderCrisis(d);
     renderWhatIf(d);
@@ -722,47 +581,6 @@ function renderRollingSharpe(d) {
     }]
   }, { plugins: { legend: { display: false } } });
 }
-
-function renderCorrelation(d) {
-  const stockCorr = d.stock_correlation;
-  console.log('[Correlation] Data:', stockCorr);
-  const container = document.getElementById('correlation-container');
-  if (!container || !stockCorr || !stockCorr.symbols || stockCorr.symbols.length === 0) {
-    if (container) container.innerHTML = '<div class="crisis-card" style="text-align:center">No stock correlation data available.</div>';
-    return;
-  }
-
-  const { symbols, matrix } = stockCorr;
-  const n = symbols.length;
-
-  // Update card title to reflect Stock Correlation
-  const titleEl = container.closest('.glass-card')?.querySelector('.card-title');
-  if (titleEl) titleEl.textContent = 'Current Portfolio Stock Correlation';
-
-  let html = `<div class="corr-grid-wrap">
-    <div class="corr-grid" style="display:grid; grid-template-columns: 60px repeat(${n}, 1fr); gap:1px; background:var(--border); border:1px solid var(--border)">`;
-  
-  // Header row
-  html += '<div class="corr-corner" style="background:var(--bg-2)"></div>';
-  symbols.forEach(s => {
-    html += `<div class="corr-label-v" style="background:var(--bg-2); font-size:0.6rem; padding:4px; text-align:center; font-weight:700" title="${s}">${s}</div>`;
-  });
-  
-  // Data rows
-  matrix.forEach((row, i) => {
-    html += `<div class="corr-label-h" style="background:var(--bg-2); font-size:0.6rem; padding:4px; font-weight:700; border-right:1px solid var(--border)">${symbols[i]}</div>`;
-    row.forEach((val, j) => {
-      const alpha = Math.abs(val);
-      const bg = val > 0 ? `rgba(16,185,129,${alpha})` : `rgba(244,63,94,${alpha})`;
-      const color = alpha > 0.4 ? '#fff' : 'var(--text-1)';
-      html += `<div class="corr-cell" style="background:${bg}; color:${color}; font-family:var(--font-mono); font-size:0.55rem; display:flex; align-items:center; justify-content:center; min-height:24px" title="${symbols[i]} vs ${symbols[j]}: ${val}">${val.toFixed(2)}</div>`;
-    });
-  });
-  
-  html += '</div></div>';
-  container.innerHTML = html;
-}
-
 
 function renderAttribution(d) {
   const history = d.exec_history || [];
@@ -1217,171 +1035,11 @@ function renderPortfolio(d) {
       <span class="kpi-value" style="color:${k.color}">${sign(k.val)}${k.val.toFixed(2)}%</span>
     </div>`).join('');
 
-  // ── Holdings table + investment calculator ─────────────
+  // Holdings table itself is subscribers-only (static notice in index.html) —
+  // only the sector breakdown (no symbols) stays public.
   const cleanPort = port.filter(s => s.clean_symbol && s.clean_symbol !== 'Stock');
-
-  window.__portHolds = cleanPort.map(s => ({
-    s: s.clean_symbol,
-    sec: s.sector,
-    w: s.weight != null ? +(s.weight * 100).toFixed(2) : null,
-    p: (s.ltp != null && s.ltp > 0) ? +(+s.ltp).toFixed(2) : null,
-    chg: s.change_pct
-  }));
-
-  document.getElementById('holdingsBody').innerHTML = window.__portHolds.map((h,i) => {
-    const chg = h.chg || 0;
-    const chgCol = chg >= 0 ? 'text-emerald' : 'text-rose';
-    return `<tr>
-      <td class="text-muted mono" style="font-size:.7rem">${i+1}</td>
-      <td class="mono" style="font-weight:700">${h.s}</td>
-      <td class="text-muted" style="font-size:.7rem">${h.sec}</td>
-      <td class="mono">${h.w != null ? h.w + '%' : '—'}</td>
-      <td class="mono">${h.p != null ? '₹'+h.p.toLocaleString('en-IN') : '—'}</td>
-      <td class="mono ${chgCol}" style="font-weight:700">${h.p != null ? (chg>=0?'+':'')+(+chg).toFixed(2)+'%' : '—'}</td>
-      <td class="mono text-cyan" id="piq${i}" style="font-weight:700">—</td>
-      <td class="mono text-emerald" id="pia${i}">—</td>
-    </tr>`;
-  }).join('');
-
-  const pa = document.getElementById('pinv-amt');
-  if (pa) pa.value = sharedInvestAmount;   // reflect the shared amount
-  recalcPortInvest();
   renderSectorPie('portSector', cleanPort);
 }
-
-/* Investment calculator for the Live Portfolio tab (same math as the heatmap
-   modal's recalcInvest, with its own 'p'-prefixed element ids). */
-function recalcPortInvest() {
-  const holds = window.__portHolds || [];
-  const amtEl = document.getElementById('pinv-amt');
-  if (!amtEl) return;
-  const total = Math.max(0, +amtEl.value || 0);
-  sharedInvestAmount = total;   // keep the Portfolio Changes tab in sync
-  const fmt = (n) => '₹' + Math.round(n).toLocaleString('en-IN');
-  let invested = 0;
-  holds.forEach((h, i) => {
-    const qEl = document.getElementById('piq' + i);
-    const aEl = document.getElementById('pia' + i);
-    if (!qEl || !aEl) return;
-    if (h.p && h.p > 0 && h.w != null) {
-      const qty = Math.max(1, Math.floor((total * (h.w / 100)) / h.p));
-      const cost = qty * h.p;
-      invested += cost;
-      qEl.textContent = qty.toLocaleString('en-IN');
-      aEl.textContent = fmt(cost);
-    } else {
-      qEl.textContent = '—';
-      aEl.textContent = '—';
-    }
-  });
-  const cash = total - invested;
-  const tEl = document.getElementById('pinv-total');
-  const cEl = document.getElementById('pinv-cash');
-  const clEl = document.getElementById('pinv-cash-label');
-  if (tEl) tEl.textContent = fmt(invested);
-  if (clEl) clEl.textContent = cash < 0 ? 'Extra Needed (min 1 share each)' : 'Cash Left';
-  if (cEl) {
-    cEl.textContent = (cash < 0 ? '-' : '') + fmt(Math.abs(cash));
-    cEl.style.color = cash < 0 ? 'var(--rose)' : 'var(--slate)';
-  }
-}
-window.recalcPortInvest = recalcPortInvest;
-
-/* ══════════════════════════════════════════════
-   TRADES
-══════════════════════════════════════════════ */
-function renderTrades(d) {
-  // Portfolio Changes view: every current holding vs last month's portfolio.
-  // Previous weight/price come from the most recent snapshot before this month,
-  // so the "Change" can be computed at the user's chosen investment amount.
-  const port = (d.current_portfolio || []).filter(s => s.clean_symbol && s.clean_symbol !== 'Stock');
-  const snap = (typeof MONTHLY_HOLDINGS !== 'undefined') ? MONTHLY_HOLDINGS : {};
-  const liveMonth = String((port.find(s => s.date) || {}).date || DASHBOARD_DATA.last_update || '').slice(0, 7);
-  const prevMonths = Object.keys(snap).sort().filter(m => !liveMonth || m < liveMonth);
-  const prevHolds = prevMonths.length ? snap[prevMonths[prevMonths.length - 1]] : [];
-  const prevBy = {};
-  prevHolds.forEach(x => { prevBy[x.s] = x; });
-
-  window.__chgHolds = port.map(s => {
-    const prev = prevBy[s.clean_symbol];
-    return {
-      s: s.clean_symbol,
-      sec: s.sector || '—',
-      w: s.weight != null ? +(s.weight * 100).toFixed(2) : null,
-      p: (s.ltp != null && s.ltp > 0) ? +(+s.ltp).toFixed(2) : null,
-      prevW: prev ? prev.w : null,
-      prevP: (prev && prev.p > 0) ? prev.p : null,
-      isNew: !prev
-    };
-  });
-
-  const ca = document.getElementById('cinv-amt');
-  if (ca) ca.value = sharedInvestAmount;   // reflect the shared amount
-  recalcChangesInvest();
-}
-
-/* Portfolio Changes calculator. The Change column is the share adjustment the
-   USER would make to rebalance from last month's portfolio to the current one
-   at the chosen Invest amount: current qty - previous qty (both whole shares,
-   min 1). The indicator (🔥 new / ▲ up / ▼ down / ↔ same) follows that delta,
-   so it updates live as the amount changes. Shares sharedInvestAmount with the
-   Live Portfolio tab. */
-function recalcChangesInvest() {
-  const holds = window.__chgHolds || [];
-  const amtEl = document.getElementById('cinv-amt');
-  if (!amtEl) return;
-  const total = Math.max(0, +amtEl.value || 0);
-  sharedInvestAmount = total;   // keep the Live Portfolio tab in sync
-  const fmt = (n) => '₹' + Math.round(n).toLocaleString('en-IN');
-  const qtyAt = (w, p) => (p > 0 && w != null) ? Math.max(1, Math.floor((total * (w / 100)) / p)) : null;
-
-  holds.forEach(h => {
-    h.curQty = qtyAt(h.w, h.p);
-    h.cost = h.curQty != null ? h.curQty * h.p : 0;
-    if (h.isNew || h.prevW == null || h.prevP == null) {
-      h.change = h.curQty;   // a brand-new position: buy the whole thing
-      h.ind = { icon: '🔥', label: 'New', color: '#22d3ee', rank: 0 };
-    } else {
-      const prevQty = qtyAt(h.prevW, h.prevP) || 0;
-      h.change = (h.curQty || 0) - prevQty;
-      if (h.change > 0)      h.ind = { icon: '▲', label: 'Increased', color: '#10b981', rank: 1 };
-      else if (h.change < 0) h.ind = { icon: '▼', label: 'Decreased', color: '#f43f5e', rank: 2 };
-      else                   h.ind = { icon: '↔', label: 'No change', color: '#94a3b8', rank: 3 };
-    }
-  });
-  holds.sort((a, b) => a.ind.rank - b.ind.rank || (b.w || 0) - (a.w || 0));
-
-  let invested = 0;
-  document.getElementById('tradesBody').innerHTML = holds.map(h => {
-    if (h.curQty != null) invested += h.cost;
-    const chg = h.change;
-    const chgTxt = h.ind.rank === 0
-      ? 'NEW +' + (chg || 0)
-      : (chg > 0 ? '+' + chg : (chg < 0 ? String(chg) : '0'));
-    return `<tr>
-      <td title="${h.ind.label}" style="text-align:center;font-size:.9rem;color:${h.ind.color}">${h.ind.icon}</td>
-      <td class="mono" style="font-weight:700">${h.s}</td>
-      <td class="text-muted" style="font-size:.7rem">${h.sec}</td>
-      <td class="mono" style="font-weight:700;color:${h.ind.color}">${chgTxt}</td>
-      <td class="mono">${h.w != null ? h.w + '%' : '—'}</td>
-      <td class="mono">${h.p != null ? '₹' + h.p.toLocaleString('en-IN') : '—'}</td>
-      <td class="mono text-cyan" style="font-weight:700">${h.curQty != null ? h.curQty.toLocaleString('en-IN') : '—'}</td>
-      <td class="mono text-emerald">${h.curQty != null ? fmt(h.cost) : '—'}</td>
-    </tr>`;
-  }).join('');
-
-  const cash = total - invested;
-  const tEl = document.getElementById('cinv-total');
-  const cEl = document.getElementById('cinv-cash');
-  const clEl = document.getElementById('cinv-cash-label');
-  if (tEl) tEl.textContent = fmt(invested);
-  if (clEl) clEl.textContent = cash < 0 ? 'Extra Needed (min 1 share each)' : 'Cash Left';
-  if (cEl) {
-    cEl.textContent = (cash < 0 ? '-' : '') + fmt(Math.abs(cash));
-    cEl.style.color = cash < 0 ? 'var(--rose)' : 'var(--slate)';
-  }
-}
-window.recalcChangesInvest = recalcChangesInvest;
 
 /* ══════════════════════════════════════════════
    HELPERS
